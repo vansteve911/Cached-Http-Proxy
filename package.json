@@ -1,0 +1,18 @@
+{
+  "name": "cached-http-proxy",
+  "version": "0.0.1",
+  "description": "a http proxy with cookie/session caching supports based on http-proxy",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "http-proxy": "1.14.0",
+    "log4js": "0.6.38"
+  },
+  "keywords": [
+    "proxy"
+  ],
+  "author": "vansteve911",
+  "license": "MIT"
+}
