@@ -1,78 +1,91 @@
 'use strict';
 const httpProxy = require('http-proxy'),
-	config = require('./config.js'),
-	logger = require('./logger.js'),
-	MemStore = require('./storage/memStore.js'),
-  fs = require('fs');
+	config = require('./config'),
+	logger = require('./logger'),
+	MemStore = require('./storage/memStore'),
+	utils = require('./utils');
 
-let proxy = httpProxy.createProxyServer({
-	target: config.targetHost(),
-	changeOrigin: true
-})
+const _proxy = Symbol['proxy'],
+	_store = Symbol['store'],
+	_opt = Symbol['opt'];
 
-let memStore = new MemStore({
-	validCookieKeys: new Set(['_ntes_nnid'])
-});
+function CachedProxyServer(opt) {
+	opt = opt || {};
+	opt.store = Object.assign({
+		type: 'mem'
+	}, opt.store);
+	opt.proxy = Object.assign({
+		target: 'http://127.0.0.1:6666',
+		changeOrigin: true
+	}, opt.proxy);
+	opt.port = opt.port || 9999;
 
-proxy.on('proxyReq', (proxyReq, req, res, options) => {
-	// must reset request host
-	
-	// proxyReq.setHeader('host', config.target.host);
+	let proxy = httpProxy.createProxyServer(opt.proxy),
+		store = opt.store === 'redis' ? {} : new MemStore({
+			validCookieKeys: new Set(['_ntes_nnid'])
+		});
 
-	// logger.debug('req cookie: ', req.headers.cookie)
-	// logger.debug('req url: ', req.url)
+	this._proxy = proxy;
+	this._store = store;
+	this._opt = opt;
 
-	let cachedRes = memStore.get(req);
-	if (cachedRes) {
-		logger.debug('found cached response!', cachedRes)
-		logger.debug('res is: ', res)		
-		// res.writeHead(cachedRes.statusCode, cachedRes.headers);
-		// res.end(cachedRes.__data);
-		proxyReq.finished = true;
-	}
-
-});
-
-var resultFile = fs.createWriteStream('result.html', {encoding: 'utf-8'});
-
-var buffers = [];
-
-proxy.on('proxyRes', (proxyRes, req, res) => {
-  
-  
-  logger.debug('proxyRes emitted! ');
-
-  proxyRes.on('data', (chunk)=>{
-  	console.log('got %d bytes of data', chunk.length);
-  	buffers.push(chunk);
-  });
-
-  proxyRes.on('end', ()=>{
-  	logger.debug('end! buffers: ', buffers);
-  	var bodyBuffer = Buffer.concat(buffers);
-  	logger.debug(bodyBuffer.length);
-  	buffers = [];
-
-  	// logger.debug('body: ', body);
-  });
-	
-	// memStore.set(req, res);
-});
-
-proxy.on('end', (req, res, proxyRes)=>{
-	// logger.debug('end emitted! ', res);
-	// memStore.set(req, res);
-	// 
-});
-
-proxy.on('error', (err, req, res) => {
-	logger.error(err);
-	res.writeHead(500, {
-		'Content-Type': 'text/plain'
+	proxy.on('proxyReq', (proxyReq, req, res, options) => {
+		let reqInfo = utils.getReqInfo(req),
+			hitCache = false;
+		let cachedRes = store.get(req);
+		if (cachedRes) {
+			hitCache = true;
+			res.writeHead(cachedRes.statusCode, cachedRes.headers);
+			var buffer = new Buffer(cachedRes.body, 'base64');
+			res.end(buffer);
+			// remove default event listener to prevent proxy response
+			proxyReq.removeAllListeners('response');
+			// reset response event: when proxy response arrives, directly respond the client
+			proxyReq.on('response', (proxyRes)=>{
+				proxyReq.finished = true;
+				res.end();
+			});
+		}
+		logger.debug('REQ: ' + reqInfo + ' HIT_CACHE: ' + hitCache);
 	});
-	res.end('Something went wrong. And we are reporting a custom error message.');
+
+	proxy.on('proxyRes', (proxyRes, req, res) => {
+		logger.debug('res has set header: ', res.headersSent);
+
+		let buffers = [];
+		proxyRes.on('data', (chunk) => {
+			buffers.push(chunk);
+		});
+		proxyRes.on('end', () => {
+			let headers = proxyRes.headers,
+				encodedBody = Buffer.concat(buffers).toString('base64');
+			headers.via = (headers.via || '') + ', cached-http-proxy';
+			store.set(req, {
+				statusCode: proxyRes.statusCode,
+				headers: headers,
+				body: encodedBody
+			});
+		});
+	});
+
+	proxy.on('error', (err, req, res) => {
+		logger.error(err);
+		res.writeHead(500, {
+			'Content-Type': 'text/plain'
+		});
+		res.end('Something went wrong. And we are reporting a custom error message.');
+	});
+}
+
+CachedProxyServer.prototype.start = function() {
+	this._proxy.listen(this._opt.port);
+	logger.debug('proxy server running on port: ' + this._opt.port);
+}
+
+let proxyServer = new CachedProxyServer({
+	proxy: {
+		target: config.target,
+	},
+	port: config.port
 });
-
-proxy.listen(config.port);
-
-logger.debug('proxy server running on port: ' + config.port);
+proxyServer.start();

@@ -1,11 +1,7 @@
 module.exports = {
-	target: {
-		scheme: 'http',
-		host: 'd.news.163.com',
-		port: 80
-	},
-	targetHost: function() {
-		return this.target.scheme + '://' + this.target.host + ':' + this.target.port;
+	target: 'http://d.news.163.com:80',
+	store: {
+		type: 'mem'
 	},
 	port: 9999
 }

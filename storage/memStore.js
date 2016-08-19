@@ -1,32 +1,29 @@
 'use strict';
 const utils = require('../utils.js'),
-	logger = require('../logger.js'),
-	Readable = require('stream').Readable;
+	logger = require('../logger.js');
 
 let _map;
 
-class MemStore {
-	constructor(opt) {
-		_map = new Map();
-		opt = opt || {};
-		this.validCookieKeys = opt.validCookieKeys || [];
-	}
+function MemStore(opt) {
+	_map = new Map();
+	opt = opt || {};
+	this.validCookieKeys = opt.validCookieKeys || [];
+}
 
-	set(req, res) {
-		if(req && res){
-			let cacheKey = utils.getReqCacheKey(req, this.validCookieKeys);
-			logger.debug('in set: cacheKey:', cacheKey);
-			if (cacheKey) {
-				_map.set(cacheKey, res);
-				logger.debug('put cached res!', res._headers);
-			}
-		}
-	}
+MemStore.prototype.get = function(req) {
+	let cacheKey = utils.getReqCacheKey(req, this.validCookieKeys);
+	if (cacheKey) {
+		return _map.get(cacheKey)
+	};
+}
 
-	get(req) {
+MemStore.prototype.set = function(req, data) {
+	if (req && data) {
 		let cacheKey = utils.getReqCacheKey(req, this.validCookieKeys);
-		logger.debug('in get, cacheKey:', cacheKey);
-		return _map.get(cacheKey);
+		if (cacheKey) {
+			_map.set(cacheKey, data);
+			logger.debug('put cached response data, cacheKey: ', cacheKey);
+		}
 	}
 }
 

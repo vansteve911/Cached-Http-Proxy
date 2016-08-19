@@ -1,6 +1,6 @@
 'use strict';
 const crypto = require('crypto'),
-	logger = require('./logger.js');
+	logger = require('./logger');
 
 function digest(input) {
 	if (input) {
@@ -8,7 +8,7 @@ function digest(input) {
 	}
 }
 
-function parseCookie(cookie, watchKeys) {
+function parseCookie(cookie, watchCookieKeys) {
 	if (cookie && typeof cookie === 'string') {
 		let kvs = {},
 			kv;
@@ -16,7 +16,7 @@ function parseCookie(cookie, watchKeys) {
 			if (str) {
 				str = str.trim();
 				if ((kv = str.split('=')) && kv.length === 2) {
-					if (!watchKeys || watchKeys.has(kv[0])) {
+					if (!watchCookieKeys || watchCookieKeys.has(kv[0])) {
 						kvs[kv[0]] = kv[1];
 					}
 				}
@@ -32,20 +32,16 @@ function parseCookie(cookie, watchKeys) {
 	}
 }
 
-module.exports.getReqCacheKey = (req, watchKeys) => {
-	logger.debug('type of request: ', typeof req);
+module.exports.getReqCacheKey = (req, watchCookieKeys) => {
 	let headers, path;
-	if (req && (headers = req.headers || req._headers) && headers && headers.cookie) {
-		// logger.debug('req: ', req)
-		let keyObj = {
-			url: headers.host + req.path,
-			cookie: parseCookie(headers.cookie, watchKeys)
-		};
-		logger.debug('in getReqCacheKey: parseCookie: ', keyObj.cookie)
-		try {
-			return digest(JSON.stringify(keyObj));
-		} catch (err) {
-			logger.error(err);
-		}
+	if (req && (headers = req.headers || req._headers)) {
+		return digest(headers.host + req.url + '_' + JSON.stringify(parseCookie(headers.cookie, watchCookieKeys)));
+	}
+}
+
+module.exports.getReqInfo = (req) => {
+	if (req && req.headers) {
+		let host = req.headers.host;
+		return `${req.method} ${host}${req.url} ; hasCookie:${!!req.headers.cookie}`;
 	}
 }
