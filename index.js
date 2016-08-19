@@ -2,10 +2,12 @@
 const httpProxy = require('http-proxy'),
 	config = require('./config.js'),
 	logger = require('./logger.js'),
-	MemStore = require('./storage/memStore.js');
+	MemStore = require('./storage/memStore.js'),
+  fs = require('fs');
 
 let proxy = httpProxy.createProxyServer({
-	target: config.targetHost()
+	target: config.targetHost(),
+	changeOrigin: true
 })
 
 let memStore = new MemStore({
@@ -14,45 +16,53 @@ let memStore = new MemStore({
 
 proxy.on('proxyReq', (proxyReq, req, res, options) => {
 	// must reset request host
-	proxyReq.setHeader('host', config.target.host);
+	
+	// proxyReq.setHeader('host', config.target.host);
+
 	// logger.debug('req cookie: ', req.headers.cookie)
 	// logger.debug('req url: ', req.url)
 
 	let cachedRes = memStore.get(req);
 	if (cachedRes) {
 		logger.debug('found cached response!', cachedRes)
-		logger.debug('res is: ', res)
-		
-		res.writeHead(cachedRes.statusCode, cachedRes.headers);
-		res.end(cachedRes.__data);
-
+		logger.debug('res is: ', res)		
+		// res.writeHead(cachedRes.statusCode, cachedRes.headers);
+		// res.end(cachedRes.__data);
 		proxyReq.finished = true;
 	}
 
 });
 
+var resultFile = fs.createWriteStream('result.html', {encoding: 'utf-8'});
+
+var buffers = [];
+
 proxy.on('proxyRes', (proxyRes, req, res) => {
-	logger.debug('put res into cache: ', res._headers);
-
-	// let resData = {
-	// 	headers: res._headers,
-	// 	data: res.__data
-	// };
-  res._originalWrite = res.write; // Store reference to the original write method
   
-  // res.__readable = new require('stream').Readable;
-  // res.__readable.setEncoding('utf8');
+  
+  logger.debug('proxyRes emitted! ');
 
-  res.__data = '';
+  proxyRes.on('data', (chunk)=>{
+  	console.log('got %d bytes of data', chunk.length);
+  	buffers.push(chunk);
+  });
 
-  // TODO: retrieve server response buffer data????
-  res.write = function(chunk, encoding, callback) {
-    res.__data += chunk;
-    res._originalWrite.call(res, chunk, encoding, callback);
-  }
-	// memStore.set(req, resData);
+  proxyRes.on('end', ()=>{
+  	logger.debug('end! buffers: ', buffers);
+  	var bodyBuffer = Buffer.concat(buffers);
+  	logger.debug(bodyBuffer.length);
+  	buffers = [];
 
-	memStore.set(req, res);
+  	// logger.debug('body: ', body);
+  });
+	
+	// memStore.set(req, res);
+});
+
+proxy.on('end', (req, res, proxyRes)=>{
+	// logger.debug('end emitted! ', res);
+	// memStore.set(req, res);
+	// 
 });
 
 proxy.on('error', (err, req, res) => {
