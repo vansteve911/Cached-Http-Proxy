@@ -18,14 +18,19 @@
 	***如***：`127.0.0.1 dev.d.news.163.com`
 	
 	其中前缀可以自定义，其作用是，让客户端访问代理服务器时能够带上后端服务器的cookie。
-2.  
+2.  执行
+
 	```
 	git clone {repo-url} ./
 	cd ./cached-http-proxy
 	npm install
 	```
+	
 3. 修改配置文件`config.js`，详见注释。
-4. ```
+
+4. 执行
+
+	```
 	npm start
 	```
 	
