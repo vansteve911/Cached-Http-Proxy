@@ -22,21 +22,29 @@ function parseCookie(cookie, watchCookieKeys) {
 				}
 			}
 		});
-		if (kvs) {
+		if (Object.keys(kvs).length) {
 			let ret = {};
 			Object.keys(kvs).sort().forEach((k) => {
 				ret[k] = kvs[k]
 			});
-			logger.debug('ret: ', ret);
 			return ret;
 		}
 	}
+	return null;
 }
 
 module.exports.getReqCacheKey = (req, watchCookieKeys) => {
-	let headers, path;
+	let headers, path, cookieStr;
 	if (req && (headers = req.headers || req._headers)) {
-		return digest(headers.host + req.url + '_' + JSON.stringify(parseCookie(headers.cookie, watchCookieKeys)));
+		try{
+			cookieStr = JSON.stringify(parseCookie(headers.cookie, watchCookieKeys));
+			return digest(headers.host + req.url + '_' + cookieStr);
+		} catch(err){
+			logger.warn('parse cookie str failed');
+			logger.warn(err);
+			return null;
+		}
+		
 	}
 }
 

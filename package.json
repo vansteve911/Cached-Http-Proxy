@@ -4,13 +4,17 @@
   "description": "a http proxy with cookie/session caching supports based on http-proxy",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "mkdir -p logs; node index.js",
+    "test": "node test/test.js"
   },
   "dependencies": {
     "http-proxy": "1.14.0",
     "log4js": "0.6.38",
     "redis": "2.6.2"
+  },
+  "repository": {
+    "type": "git",
+    "url":"https://github.com/vansteve911/Cached-Http-Proxy"
   },
   "keywords": [
     "proxy"
