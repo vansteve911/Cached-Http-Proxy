@@ -16,7 +16,7 @@ function parseCookie(cookie, watchCookieKeys) {
 			if (str) {
 				str = str.trim();
 				if ((kv = str.split('=')) && kv.length === 2) {
-					if (!watchCookieKeys || watchCookieKeys.has(kv[0])) {
+					if (watchCookieKeys && watchCookieKeys.has(kv[0])) {
 						kvs[kv[0]] = kv[1];
 					}
 				}
@@ -27,6 +27,7 @@ function parseCookie(cookie, watchCookieKeys) {
 			Object.keys(kvs).sort().forEach((k) => {
 				ret[k] = kvs[k]
 			});
+			logger.debug('ret: ', ret);
 			return ret;
 		}
 	}

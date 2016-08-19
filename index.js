@@ -3,6 +3,7 @@ const httpProxy = require('http-proxy'),
 	config = require('./config'),
 	logger = require('./logger'),
 	MemStore = require('./storage/memStore'),
+	RedisStore = require('./storage/redisStore'),
 	utils = require('./utils');
 
 const _proxy = Symbol['proxy'],
@@ -10,6 +11,7 @@ const _proxy = Symbol['proxy'],
 	_opt = Symbol['opt'];
 
 function CachedProxyServer(opt) {
+
 	opt = opt || {};
 	opt.store = Object.assign({
 		type: 'mem'
@@ -21,7 +23,9 @@ function CachedProxyServer(opt) {
 	opt.port = opt.port || 9999;
 
 	let proxy = httpProxy.createProxyServer(opt.proxy),
-		store = opt.store === 'redis' ? {} : new MemStore({
+		store = opt.store.type === 'redis' ? 
+			new RedisStore(config.store)
+		 : new MemStore({
 			validCookieKeys: new Set(['_ntes_nnid'])
 		});
 
@@ -32,26 +36,26 @@ function CachedProxyServer(opt) {
 	proxy.on('proxyReq', (proxyReq, req, res, options) => {
 		let reqInfo = utils.getReqInfo(req),
 			hitCache = false;
-		let cachedRes = store.get(req);
-		if (cachedRes) {
-			hitCache = true;
-			res.writeHead(cachedRes.statusCode, cachedRes.headers);
-			var buffer = new Buffer(cachedRes.body, 'base64');
-			res.end(buffer);
-			// remove default event listener to prevent proxy response
-			proxyReq.removeAllListeners('response');
-			// reset response event: when proxy response arrives, directly respond the client
-			proxyReq.on('response', (proxyRes)=>{
-				proxyReq.finished = true;
-				res.end();
-			});
-		}
-		logger.debug('REQ: ' + reqInfo + ' HIT_CACHE: ' + hitCache);
+		store.get(req)
+			.then((cachedRes) => {
+				if (cachedRes) {
+					hitCache = true;
+					res.writeHead(cachedRes.statusCode, cachedRes.headers);
+					var buffer = new Buffer(cachedRes.body, 'base64');
+					res.end(buffer);
+					// remove default event listener to prevent proxy response
+					proxyReq.removeAllListeners('response');
+					// reset response event: when proxy response arrives, directly respond the client
+					proxyReq.on('response', (proxyRes) => {
+						proxyReq.finished = true;
+						res.end();
+					});
+				}
+				logger.debug('REQ: ' + reqInfo + ' HIT_CACHE: ' + hitCache);
+			}).catch(logger.error);
 	});
 
 	proxy.on('proxyRes', (proxyRes, req, res) => {
-		logger.debug('res has set header: ', res.headersSent);
-
 		let buffers = [];
 		proxyRes.on('data', (chunk) => {
 			buffers.push(chunk);
@@ -64,7 +68,9 @@ function CachedProxyServer(opt) {
 				statusCode: proxyRes.statusCode,
 				headers: headers,
 				body: encodedBody
-			});
+			})
+			.then()
+			.catch(logger.error);
 		});
 	});
 
@@ -86,6 +92,7 @@ let proxyServer = new CachedProxyServer({
 	proxy: {
 		target: config.target,
 	},
+	// store: config.store,
 	port: config.port
 });
 proxyServer.start();

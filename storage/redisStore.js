@@ -1,40 +1,58 @@
 'use strict';
-const utils = require('../utils.js'),
-	logger = require('../logger.js'),
+const utils = require('../utils'),
+	logger = require('../logger'),
 	redis = require('redis');
 
 const KEY_PREFIX = 'chp_';
 
-let _opt = {};
+let _opt;
 
 function RedisStore(opt){
-	_opt = Object.assign({}, opt) 
+	_opt = Object.assign({
+    redis: {},
+    validCookieKeys: new Set()
+  }, opt);
 }
 
 RedisStore.prototype.get = function(req) {
-	let cacheKey = utils.getReqCacheKey(req, this.validCookieKeys);
-	if(cacheKey)
-	return redisGet(cacheKey);
+	return new Promise((resolve,reject)=>{
+		let cacheKey = utils.getReqCacheKey(req, _opt.validCookieKeys);
+		if(cacheKey){
+      logger.debug('redis key: ', KEY_PREFIX + cacheKey);
+			redisGet(KEY_PREFIX + cacheKey)
+			.then(resolve)
+			.catch(reject);
+		} else {
+			reject(new Error('failed to get req cache key: ', req))
+		}
+	});
 }
 
 RedisStore.prototype.set = function(req, data) {
-	if (req && data) {
-		let cacheKey = utils.getReqCacheKey(req, this.validCookieKeys);
-		if (cacheKey) {
-			redisSet(cacheKey, data)
-			.then(()=>{
-				logger.debug('put cached response data, cacheKey: ', cacheKey);
-			})
-			.catch(logger.error);
+	return new Promise((resolve, reject)=>{
+		if (req && data) {
+			resolve();
+			let cacheKey = utils.getReqCacheKey(req, _opt.validCookieKeys);
+			if (cacheKey) {
+				redisSet(cacheKey, data)
+				.then(()=>{
+					logger.debug('put cached response data, cacheKey: ', cacheKey);
+				})
+				.catch(logger.error);
+			}
+		}	else if(!req){
+			logger.warn('empty req!');
+		} else {
+			logger.warn('empty data!');
 		}
-	}
+	});
 }
 
 function activateClient() {
   let self = this;
   return new Promise((resolve, reject) => {
     try {
-      let client = redis.createClient(config.redis);
+      let client = redis.createClient(_opt.redis);
       client.on('error', function(err) {
         logger.error('redis client error!', err.stack);
       });
@@ -48,7 +66,7 @@ function activateClient() {
   })
 }
 
-function redisGet = function(key) {
+function redisGet(key) {
   return new Promise((resolve, reject) => {
     if (key) {
       activateClient().then((client) => {
@@ -71,7 +89,7 @@ function redisGet = function(key) {
   });
 }
 
-function redisSet = function(key, value) {
+function redisSet(key, value) {
   return new Promise(function(resolve, reject) {
     if (key && value) {
       activateClient()
@@ -108,3 +126,5 @@ function parseObjectResult(result) {
     }
   });
 }
+
+module.exports = RedisStore;
