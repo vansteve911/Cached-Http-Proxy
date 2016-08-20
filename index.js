@@ -79,10 +79,10 @@ function CachedProxyServer(opt) {
 
 	proxy.on('error', (err, req, res) => {
 		logger.error(err);
-		res.writeHead(500, {
-			'Content-Type': 'text/plain'
-		});
-		res.end('Something went wrong. And we are reporting a custom error message.');
+		// res.writeHead(500, {
+		// 	'Content-Type': 'text/plain'
+		// });
+		// res.end('Something went wrong. And we are reporting a custom error message.');
 	});
 }
 
