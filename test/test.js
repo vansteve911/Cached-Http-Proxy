@@ -28,43 +28,14 @@ let promises = [
   pb,
 ];
 
-// let starter = Promise.resolve(1);
-// promises.forEach(function(promise){
-//   starter = starter.then(promise);
-// });
-
-
 let execSeq = function(){
-  
-  // function recordValue(results, value) {
-  //     results.push(value);
-  //     return results;
-  // }
-  // let pushValue = recordValue.bind(null, []);
-
   let trigger = Promise.resolve();
   promises.forEach((task)=>{
     trigger = trigger.then(task)
-    // .then(pushValue);
   })
   return trigger;
-  // return promises.reduce(function (promise, task) {
-  //     return promise.then(task).then(pushValue);
-  // }, Promise.resolve());
 }
 
 execSeq()
-// Promise.resolve()
-//   .then(pa)
-//   .then(pb)
   .then(logger.debug)
   .catch(logger.error);
-
-
-// starter
-// .then((res)=>{
-//   logger.debug('finished!', res)
-// }).catch((err)=>{
-//   logger.warn(' something went wrong!')
-//   console.trace(err);
-// });
