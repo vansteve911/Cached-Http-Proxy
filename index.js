@@ -1,5 +1,5 @@
 'use strict';
-const httpProxy = require('http-proxy'),
+const httpProxy = require('http-proxy-promisify'),
 	config = require('./config'),
 	logger = require('./logger'),
 	MemStore = require('./storage/memStore'),
@@ -11,7 +11,6 @@ const _proxy = Symbol['proxy'],
 	_opt = Symbol['opt'];
 
 function CachedProxyServer(opt) {
-
 	opt = opt || {};
 	opt.store = Object.assign({
 		type: 'mem',
@@ -26,7 +25,7 @@ function CachedProxyServer(opt) {
 	let proxy = httpProxy.createProxyServer(opt.proxy),
 		store;
 
-	if(opt.store.type === 'redis') {
+	if (opt.store.type === 'redis') {
 		store = new RedisStore(opt.store);
 	} else {
 		store = new MemStore(opt.store);
@@ -36,28 +35,34 @@ function CachedProxyServer(opt) {
 	this._store = store;
 	this._opt = opt;
 
-	proxy.on('proxyReq', (proxyReq, req, res, options) => {
-		let reqInfo = utils.getReqInfo(req),
-			hitCache = false;
-		store.get(req)
+	let interceptor = function reqInterceptor(args) {
+		let hitCache = false,
+			req = args.req,
+			res = args.res,
+			reqInfo = utils.getReqInfo(req);
+		return store.get(req)
 			.then((cachedRes) => {
-				if (cachedRes) {
-					hitCache = true;
-					cachedRes.headers['cache-hit'] = true;
-					res.writeHead(cachedRes.statusCode, cachedRes.headers);
-					var buffer = new Buffer(cachedRes.body, 'base64');
-					res.end(buffer);
-					// remove default event listener to prevent proxy response
-					proxyReq.removeAllListeners('response');
-					// reset response event: when proxy response arrives, directly respond to the client
-					proxyReq.on('response', (proxyRes) => {
-						proxyReq.finished = true;
-					});
-				}
-				logger.info('REQ: ' + reqInfo + ' HIT_CACHE: ' + hitCache);
+				return new Promise((resolve, reject) => {
+					try {
+						if (cachedRes) {
+							hitCache = true;
+							cachedRes.headers['cache-hit'] = 1;
+							res.writeHead(cachedRes.statusCode, cachedRes.headers);
+							var buffer = new Buffer(cachedRes.body, 'base64');
+							res.end(buffer);
+							reject();
+						} else {
+							resolve();
+						}
+					} catch (err) {
+						reject(err);
+					}
+					logger.info('REQ: ' + reqInfo + ' HIT_CACHE: ' + hitCache);
+				})
 			})
-			.catch(logger.error);
-	});
+	};
+	interceptor.isPromisified = true;
+	proxy.before('web', 'deleteLength', interceptor);
 
 	proxy.on('proxyRes', (proxyRes, req, res) => {
 		let buffers = [];
@@ -78,11 +83,11 @@ function CachedProxyServer(opt) {
 	});
 
 	proxy.on('error', (err, req, res) => {
-		logger.error(err);
-		// res.writeHead(500, {
-		// 	'Content-Type': 'text/plain'
-		// });
-		// res.end('Something went wrong. And we are reporting a custom error message.');
+		logger.error(err, 2333);
+		res.writeHead(500, {
+			'Content-Type': 'text/plain'
+		});
+		res.end('Something went wrong. And we are reporting a custom error message.');
 	});
 }
 
@@ -99,4 +104,5 @@ let proxyServer = new CachedProxyServer({
 	store: config.store,
 	port: config.port
 });
+
 proxyServer.start();
